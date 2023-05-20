@@ -3,9 +3,11 @@ import logging
 from pathlib import Path
 import argparse
 import os
+from datetime import datetime
+from typing import Optional
 
 from aiogram import Bot, Dispatcher, types, executor
-from sqlalchemy import select, func
+from sqlalchemy import func
 
 from model import Config, Volume
 from postgres import PostgresEngine
@@ -54,7 +56,7 @@ async def process_start_command(message: types.Message) -> None:
     markup = types.ReplyKeyboardMarkup()
 
     volume_buttons = []
-    for volume in (0.1, 0.2, 0.5, 1.0):
+    for volume in (50, 100, 200, 500, 1000):
         volume_buttons.append(types.KeyboardButton(str(volume)))
 
     markup.row(*volume_buttons)
@@ -64,15 +66,77 @@ async def process_start_command(message: types.Message) -> None:
 
 
 @dp.message_handler(regexp='Сегодня')
-async def view_my_costs(message: types.Message) -> None:
-    output_text = 'Здесь будет отчет за сегодня'
+async def view_today_volume(message: types.Message) -> None:
+    volume = drunk_today(message.from_user.id)
+    if volume:
+        output_text = f'За сегодня выпито: {volume}'
+    elif volume == 0:
+        output_text = 'Данных за сегодня нет'
+    else:
+        output_text = 'Ошибка получения данных =('
     await message.answer(output_text)
 
 
-@dp.message_handler(regexp=r'\d\.\d')
+@dp.message_handler(regexp=r'\d{2,4}')
 async def process_regular_message(message: types.Message):
-    output_text = 'Здесь будет запись в БД'
+    global postgres_engine
+
+    try:
+        amount = int(message.text)
+    except Exception as e:
+        amount = 0
+        logging.error(e)
+
+    if amount:
+        try:
+            session = postgres_engine.session()
+            try:
+                session.add(
+                    Volume(
+                        amount=amount,
+                        ts=datetime.now(),
+                        user_telegram_id=message.from_user.id
+                    )
+                )
+                session.commit()
+                output_text = f'Добавлено: {amount}'
+                amount_today = drunk_today(message.from_user.id)
+                if amount_today:
+                    output_text += f'\nЗа сегодня выпито: {amount_today}'
+
+            except Exception as e:
+                raise e
+            finally:
+                session.close()
+        except Exception as e:
+            output_text = 'Ошибка в процессе сохранения данных =('
+            logging.error(e)
+    else:
+        output_text = 'Ошибка в процессе обработки данных =('
     await message.answer(output_text)
+
+
+def drunk_today(tg_user_id: int) -> Optional[int]:
+    global postgres_engine
+
+    try:
+        session = postgres_engine.session()
+
+        try:
+            res = session.query(func.sum(Volume.amount)).where(
+                Volume.ts >= datetime.now().strftime('%Y/%m/%d')
+            ).where(
+                Volume.user_telegram_id == tg_user_id
+            ).scalar()
+            print(res)
+            return res if res else 0
+        except Exception:
+            raise
+        finally:
+            session.close()
+    except Exception as e:
+        logging.error(e)
+        return None
 
 
 if __name__ == '__main__':

@@ -1,7 +1,6 @@
 from sqlalchemy.orm import declarative_base
-from sqlalchemy import Column, BigInteger, Text, Integer, DateTime, BIGINT, Float
+from sqlalchemy import Column, BigInteger, Integer, DateTime, BIGINT
 from pydantic import BaseModel
-from typing import List
 
 
 Base = declarative_base()
@@ -34,6 +33,6 @@ class Volume(Base):
     __table_args__ = {'schema': 'water_bot'}
 
     id = Column('volume_id', BigInteger, quote=False, primary_key=True)
-    amount = Column('volume_amount', Float, quote=False)
+    amount = Column('volume_amount', Integer, quote=False)
     ts = Column('volume_ts', DateTime, quote=False)
     user_telegram_id = Column('user_tg_id', BIGINT, quote=False)

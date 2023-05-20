@@ -17,7 +17,6 @@ class PostgresEngine:
             )
             self._engine.connect()
             logging.info('[x] Postgres engine created')
-            # self.create_all_tables()
         except Exception:
             logging.error('Error while creating Postgres Engine')
             raise
